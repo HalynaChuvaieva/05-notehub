@@ -1,60 +1,58 @@
-import { useState } from 'react'
-import css from './App.module.css'
-import SearchBar  from '../SearchBar/SearchBar'
-import fetchMovie from '../../services/movieService'
-import { Toaster, toast } from 'react-hot-toast'
-import type { Movie } from '../../types/movie'
-import MovieGrid from '../MovieGrid/MovieGrid'
-import Loader from '../Loader/Loader'
-import ErrorMessage from '../ErrorMessage/ErrorMessage'
-import MovieModal from '../MovieModal/MovieModal'
-import { useQuery, keepPreviousData } from '@tanstack/react-query'
-import Pagination from '../Pagination/Pagination'
+import { useState } from "react";
+import css from "./App.module.css";
+import NoteList from "../NoteList/NoteList";
+import { useQuery, keepPreviousData } from "@tanstack/react-query";
+import { fetchNotes } from "../../services/noteService";
+import Pagination from "../Pagination/Pagination";
+import Modal from "../Modal/Modal";
+import NoteForm from "../NoteForm/NoteForm";
+import SearchBox from "../SearchBox/SearchBox";
+import { useDebouncedCallback } from "use-debounce";
 
 export default function App() {
-    const [topic, setTopic] = useState('');
-    const [currentPage, setCurrentPage] = useState(1);
-    const [selectedMovie, setSelectedMovie] = useState<Movie| null>(null);
+  const [page, setPage] = useState(1);
+  const [searchValue, setSearchValue] = useState("");
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
-    
-    const openModal = (movie: Movie) => {
-        setSelectedMovie(movie);
-    };
-    const closeModal = () => {
-        setSelectedMovie(null);
-    };
+  const { data, isSuccess } = useQuery({
+    queryKey: ["notes", searchValue, page],
+    queryFn: () => fetchNotes(searchValue, page),
+    placeholderData: keepPreviousData,
+  });
 
-    const { data, isLoading, isError, isSuccess } = useQuery({
-            queryKey: ['movies', topic, currentPage],
-            queryFn: () => fetchMovie({ query: topic, page: currentPage }),
-            enabled: topic !== '',
-            placeholderData: keepPreviousData,
-    });
-    const totalPages = data?.total_pages || 0;
-    const handleSubmit = async (formData: FormData) => {
+  const handleChange = useDebouncedCallback(
+    (event: React.ChangeEvent<HTMLInputElement>) => {
+      setSearchValue(event.target.value.trim());
+      setPage(1);
+    },
+    500,
+  );
+  const closeModal = () => setIsModalOpen(false);
 
-        const query = formData.get("query") as string;
-        
-        if (!query.trim()) {
-            toast.error("Please enter your search query.");
-            return;
-        }
-        
-        setTopic(query);
-        setCurrentPage(1);
-        
-    }
+  const totalPages = data?.totalPages || 0;
 
-    return (
-        <div className={css.app}>
-            <Toaster />
-            <SearchBar onSubmit={handleSubmit} />
-            {totalPages > 1 && <Pagination totalPages={totalPages} currentPage={currentPage} onPageChange={(page) => setCurrentPage(page)} />}
+  return (
+    <div className={css.app}>
+      <header className={css.toolbar}>
+        <SearchBox value={searchValue} onSearch={handleChange} />
 
-            {isLoading && <Loader />}
-            {isError && <ErrorMessage/>}
-            {isSuccess && data && data.results.length > 0 && (<MovieGrid movies={data.results} onSelect={openModal} />)}
-            {selectedMovie && <MovieModal movie={selectedMovie} onClose={closeModal} />}
-        </div>
-    )
+        {totalPages > 1 && (
+          <Pagination
+            totalPages={totalPages}
+            currentPage={page}
+            onPageChange={setPage}
+          />
+        )}
+        <button className={css.button} onClick={() => setIsModalOpen(true)}>
+          Create note +
+        </button>
+      </header>
+      {isSuccess && data.notes.length > 0 && <NoteList notes={data.notes} />}
+      {isModalOpen && (
+        <Modal onClose={closeModal}>
+          <NoteForm onClose={closeModal} />
+        </Modal>
+      )}
+    </div>
+  );
 }
